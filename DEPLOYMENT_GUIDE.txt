@@ -1,0 +1,108 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    DEPLOYMENT GUIDE - NEXT STEPS                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+FILES GENERATED IN: C:/oct25_phd/qwen-coder-ins/deployment_files
+===============================================
+✓ annotation_tasks.csv       - Your annotation data
+✓ streamlit_app.py           - Web application
+✓ requirements.txt           - Dependencies
+✓ README.md                  - Documentation
+
+NEXT STEPS TO DEPLOY:
+=====================
+
+STEP 1: CREATE GITHUB REPOSITORY (2 min)
+-----------------------------------------
+1. Go to: https://github.com
+2. Sign in (or create account)
+3. Click "+" → "New repository"
+4. Repository name: "qwen-annotation"
+5. Make it PUBLIC
+6. Check "Add a README file"
+7. Click "Create repository"
+
+STEP 2: UPLOAD FILES (3 min)
+-----------------------------
+1. In your new repository, click "Add file" → "Upload files"
+2. Drag and drop these 4 files:
+   - annotation_tasks.csv
+   - streamlit_app.py
+   - requirements.txt
+   - README.md
+3. Click "Commit changes"
+
+STEP 3: DEPLOY TO STREAMLIT CLOUD (5 min)
+------------------------------------------
+1. Go to: https://share.streamlit.io
+2. Click "Sign in" → "Continue with GitHub"
+3. Authorize Streamlit Cloud
+4. Click "New app" button
+5. Fill in:
+   - Repository: yourusername/qwen-annotation
+   - Branch: main
+   - Main file path: streamlit_app.py
+6. Click "Deploy!"
+7. Wait 2-3 minutes for deployment
+
+STEP 4: GET YOUR URL (1 min)
+-----------------------------
+After deployment, you'll get a URL like:
+https://yourusername-qwen-annotation.streamlit.app
+
+STEP 5: SHARE WITH 15 ANNOTATORS
+---------------------------------
+Send them this email:
+
+---EMAIL TEMPLATE---
+Subject: Qwen-Coder Annotation Task
+
+Hi,
+
+Please complete the annotation task at:
+[PASTE YOUR STREAMLIT URL HERE]
+
+Instructions:
+1. Click the link
+2. Enter your name/ID
+3. Evaluate responses (20-30 min per query)
+4. Click "Export Annotations" when done
+5. Email the CSV file back to me
+
+Thanks!
+---END EMAIL---
+
+COLLECTING RESULTS:
+===================
+Each annotator will export their CSV file.
+To merge all results:
+
+import pandas as pd
+import glob
+
+files = glob.glob("annotations_*.csv")
+df_list = [pd.read_csv(f) for f in files]
+merged = pd.concat(df_list, ignore_index=True)
+merged.to_csv("all_annotations.csv", index=False)
+
+TROUBLESHOOTING:
+================
+If app doesn't load:
+- Check all 4 files are uploaded
+- Verify annotation_tasks.csv is in same folder as streamlit_app.py
+- Check Streamlit Cloud logs for errors
+
+If annotators can't access:
+- Ensure repository is PUBLIC
+- Share the correct URL
+- Test the URL yourself first
+
+TOTAL TIME: 15 minutes
+TOTAL COST: $0 (completely free)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Need help? Check:
+- Streamlit docs: https://docs.streamlit.io
+- GitHub guides: https://guides.github.com
