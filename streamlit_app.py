@@ -106,14 +106,12 @@ for i, tab in enumerate(tabs):
         row = query_data[query_data["response_number"] == i + 1].iloc[0]
         
         st.markdown(f"#### Response Text")
-        st.text_area(
-            "Response",
-            row["response_text"],
-            height=200,
-            disabled=True,
-            key=f"resp_display_{i}_{st.session_state.current_idx}",
-            label_visibility="collapsed"
-        )
+        st.markdown(f"""
+        <div style="background-color: white; padding: 15px; border-radius: 5px; border: 1px solid #ddd; 
+                    color: black; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto;">
+        {row["response_text"]}
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
         st.markdown("#### 📊 Quality Ratings (1-5)")
