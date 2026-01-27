@@ -91,72 +91,74 @@ st.markdown("### 📋 Query")
 st.info(query_data.iloc[0]["query_text"])
 
 st.markdown("---")
-st.markdown("### 💬 Evaluate All 4 Responses")
+st.markdown("### 💬 Compare All 4 Responses Side-by-Side")
 
 response_labels = ["Baseline NLQ", "RAG TF-IDF", "RAG Embedding", "RAG Hybrid"]
 colors = ["🔵", "🟢", "🟠", "🟣"]
 
-# Create tabs for each response
-tabs = st.tabs([f"{colors[i]} {response_labels[i]}" for i in range(4)])
+# Display all 4 responses in columns
+st.markdown("#### Responses")
+cols = st.columns(4)
 
-temp_annotations = []
-
-for i, tab in enumerate(tabs):
-    with tab:
+for i, col in enumerate(cols):
+    with col:
         row = query_data[query_data["response_number"] == i + 1].iloc[0]
-        
-        st.markdown(f"#### Response Text")
+        st.markdown(f"**{colors[i]} {response_labels[i]}**")
         st.markdown(f"""
-        <div style="background-color: white; padding: 15px; border-radius: 5px; border: 1px solid #ddd; 
-                    color: black; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto;">
+        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 2px solid #ddd; 
+                    color: black; font-family: monospace; white-space: pre-wrap; max-height: 300px; 
+                    overflow-y: auto; font-size: 11px;">
         {row["response_text"]}
         </div>
         """, unsafe_allow_html=True)
+
+st.markdown("---")
+st.markdown("### 📊 Evaluate Each Response")
+
+# Evaluation sections in columns
+temp_annotations = []
+
+cols = st.columns(4)
+
+for i, col in enumerate(cols):
+    with col:
+        row = query_data[query_data["response_number"] == i + 1].iloc[0]
         
-        st.markdown("---")
-        st.markdown("#### 📊 Quality Ratings (1-5)")
+        st.markdown(f"#### {colors[i]} {response_labels[i]}")
         
-        col1, col2, col3 = st.columns(3)
+        st.markdown("**Quality (1-5)**")
+        accuracy = st.slider("Accuracy", 1, 5, 3, key=f"acc_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("⭐ Accuracy")
         
-        with col1:
-            accuracy = st.slider("Accuracy", 1, 5, 3, key=f"acc_{i}_{st.session_state.current_idx}")
-            completeness = st.slider("Completeness", 1, 5, 3, key=f"comp_{i}_{st.session_state.current_idx}")
+        completeness = st.slider("Completeness", 1, 5, 3, key=f"comp_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("⭐ Completeness")
         
-        with col2:
-            relevance = st.slider("Relevance", 1, 5, 3, key=f"rel_{i}_{st.session_state.current_idx}")
-            clarity = st.slider("Clarity", 1, 5, 3, key=f"clar_{i}_{st.session_state.current_idx}")
+        relevance = st.slider("Relevance", 1, 5, 3, key=f"rel_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("⭐ Relevance")
         
-        with col3:
-            helpfulness = st.slider("Helpfulness", 1, 5, 3, key=f"help_{i}_{st.session_state.current_idx}")
-            overall = st.slider("Overall (1-10)", 1, 10, 5, key=f"overall_{i}_{st.session_state.current_idx}")
+        clarity = st.slider("Clarity", 1, 5, 3, key=f"clar_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("⭐ Clarity")
         
-        st.markdown("---")
-        st.markdown("#### 🎯 Comparative Ranking")
-        rank = st.number_input(
-            "Rank this response (1=best, 4=worst)",
-            min_value=1,
-            max_value=4,
-            value=i + 1,
-            key=f"rank_{i}_{st.session_state.current_idx}"
-        )
+        helpfulness = st.slider("Helpfulness", 1, 5, 3, key=f"help_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("⭐ Helpfulness")
         
-        st.markdown("---")
-        st.markdown("#### ✅ Binary Flags")
+        st.markdown("**Overall (1-10)**")
+        overall = st.slider("Overall", 1, 10, 5, key=f"overall_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            contains_errors = st.checkbox("Contains Errors", key=f"err_{i}_{st.session_state.current_idx}")
-            safety_concerns = st.checkbox("Safety Concerns", key=f"safe_{i}_{st.session_state.current_idx}")
-            policy_violation = st.checkbox("Policy Violation", key=f"policy_{i}_{st.session_state.current_idx}")
-        with col2:
-            complete_solution = st.checkbox("Complete Solution", key=f"sol_{i}_{st.session_state.current_idx}")
-            requires_escalation = st.checkbox("Requires Escalation", key=f"esc_{i}_{st.session_state.current_idx}")
+        st.markdown("**Rank (1-4)**")
+        rank = st.number_input("Rank", 1, 4, i + 1, key=f"rank_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
+        st.caption("1=best, 4=worst")
         
-        st.markdown("---")
-        st.markdown("#### 📝 Qualitative Feedback")
+        st.markdown("**Flags**")
+        contains_errors = st.checkbox("Errors", key=f"err_{i}_{st.session_state.current_idx}")
+        complete_solution = st.checkbox("Complete", key=f"sol_{i}_{st.session_state.current_idx}")
+        requires_escalation = st.checkbox("Escalate", key=f"esc_{i}_{st.session_state.current_idx}")
         
-        strengths = st.text_area("Strengths", key=f"str_{i}_{st.session_state.current_idx}", height=80)
-        weaknesses = st.text_area("Weaknesses", key=f"weak_{i}_{st.session_state.current_idx}", height=80)
+        st.markdown("**Feedback**")
+        strengths = st.text_area("Strengths", key=f"str_{i}_{st.session_state.current_idx}", height=60, label_visibility="collapsed")
+        st.caption("💪 Strengths")
+        weaknesses = st.text_area("Weaknesses", key=f"weak_{i}_{st.session_state.current_idx}", height=60, label_visibility="collapsed")
+        st.caption("⚠️ Weaknesses")
         
         # Store annotation for this response
         temp_annotations.append({
@@ -175,8 +177,8 @@ for i, tab in enumerate(tabs):
             "overall": overall,
             "rank": rank,
             "contains_errors": contains_errors,
-            "safety_concerns": safety_concerns,
-            "policy_violation": policy_violation,
+            "safety_concerns": False,
+            "policy_violation": False,
             "complete_solution": complete_solution,
             "requires_escalation": requires_escalation,
             "strengths": strengths,
