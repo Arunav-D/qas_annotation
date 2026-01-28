@@ -2,27 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import json
-import spacy
-from spacy import displacy
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Qwen-Coder Annotation", layout="wide")
 
-# Load spaCy model
-@st.cache_resource
-def load_spacy_model():
-    try:
-        nlp = spacy.load("en_core_web_sm")
-    except:
-        st.error("Downloading spaCy model... Please wait.")
-        import os
-        os.system("python -m spacy download en_core_web_sm")
-        nlp = spacy.load("en_core_web_sm")
-    return nlp
-
-nlp = load_spacy_model()
-
-# Load data
+# Load data (already processed with spaCy)
 @st.cache_data
 def load_data():
     return pd.read_csv("annotation_tasks.csv")
@@ -30,7 +14,7 @@ def load_data():
 df = load_data()
 queries = df["query_id"].unique()
 
-# Define 18 entity subtypes to highlight
+# Define 18 entity subtypes
 ENTITY_TYPES = {
     'PERSON': 'People, including fictional',
     'NORP': 'Nationalities, religious/political groups',
@@ -52,20 +36,6 @@ ENTITY_TYPES = {
     'CARDINAL': 'Numerals that do not fall under other types'
 }
 
-def render_entities(text):
-    """Process text with spaCy and render entities"""
-    doc = nlp(text)
-    
-    # Count entities by type
-    entity_counts = {}
-    for ent in doc.ents:
-        entity_counts[ent.label_] = entity_counts.get(ent.label_, 0) + 1
-    
-    # Generate HTML with custom colors
-    html = displacy.render(doc, style="ent", jupyter=False)
-    
-    return html, entity_counts, doc
-
 # Initialize session state
 if "current_idx" not in st.session_state:
     st.session_state.current_idx = 0
@@ -76,7 +46,7 @@ if "annotator_id" not in st.session_state:
 if "show_entities" not in st.session_state:
     st.session_state.show_entities = True
 
-# Sidebar - Annotator ID
+# Sidebar
 with st.sidebar:
     st.header("👤 Annotator Information")
     
@@ -93,7 +63,7 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("📊 Progress")
-    completed = len(st.session_state.annotations) // 4  # 4 responses per query
+    completed = len(st.session_state.annotations) // 4
     st.metric("Queries Completed", f"{completed} / {len(queries)}")
     st.progress(st.session_state.current_idx / len(queries))
     
@@ -165,28 +135,24 @@ colors = ["🔵", "🟢", "🟠", "🟣"]
 st.markdown("#### Responses")
 cols = st.columns(4)
 
-response_data = []
 for i, col in enumerate(cols):
     with col:
         row = query_data[query_data["response_number"] == i + 1].iloc[0]
         st.markdown(f"**{colors[i]} {response_labels[i]}**")
         
-        if st.session_state.show_entities:
-            # Process with spaCy and show entities
-            html, entity_counts, doc = render_entities(row["response_text"])
-            
-            # Show entity counts
-            if entity_counts:
-                st.markdown("**Entities Found:**")
-                entity_summary = " | ".join([f"{k}: {v}" for k, v in sorted(entity_counts.items())])
-                st.caption(entity_summary)
-            else:
-                st.caption("No entities detected")
-            
-            # Render entity visualization
-            components.html(html, height=350, scrolling=True)
-            
-            response_data.append((row, entity_counts, doc))
+        # Parse entity counts
+        entity_counts = json.loads(row["entity_counts_json"]) if pd.notna(row["entity_counts_json"]) else {}
+        
+        if entity_counts:
+            st.caption(f"**Entities:** {row['entity_count']} found")
+            entity_summary = " | ".join([f"{k}:{v}" for k, v in sorted(entity_counts.items())])
+            st.caption(entity_summary)
+        else:
+            st.caption("No entities detected")
+        
+        if st.session_state.show_entities and pd.notna(row["entity_html"]):
+            # Display pre-computed entity HTML
+            components.html(row["entity_html"], height=350, scrolling=True)
         else:
             # Show plain text
             st.markdown(f"""
@@ -196,26 +162,23 @@ for i, col in enumerate(cols):
             {row["response_text"]}
             </div>
             """, unsafe_allow_html=True)
-            
-            response_data.append((row, {}, None))
 
 st.markdown("---")
 st.markdown("### 📊 Evaluate Each Response")
 
 # Evaluation sections in columns
 temp_annotations = []
-
 cols = st.columns(4)
 
 for i, col in enumerate(cols):
     with col:
-        row, entity_counts, doc = response_data[i]
+        row = query_data[query_data["response_number"] == i + 1].iloc[0]
+        entity_counts = json.loads(row["entity_counts_json"]) if pd.notna(row["entity_counts_json"]) else {}
         
         st.markdown(f"#### {colors[i]} {response_labels[i]}")
         
-        # Show entity statistics
         if entity_counts:
-            st.metric("Entities", sum(entity_counts.values()))
+            st.metric("Entities", row['entity_count'])
         
         st.markdown("**Quality (1-5)**")
         accuracy = st.slider("Accuracy", 1, 5, 3, key=f"acc_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
@@ -251,7 +214,7 @@ for i, col in enumerate(cols):
         weaknesses = st.text_area("Weaknesses", key=f"weak_{i}_{st.session_state.current_idx}", height=60, label_visibility="collapsed")
         st.caption("⚠️ Weaknesses")
         
-        # Store annotation for this response
+        # Store annotation
         annotation = {
             "annotator_id": st.session_state.annotator_id,
             "timestamp": datetime.now().isoformat(),
@@ -268,14 +231,12 @@ for i, col in enumerate(cols):
             "overall": overall,
             "rank": rank,
             "contains_errors": contains_errors,
-            "safety_concerns": False,
-            "policy_violation": False,
             "complete_solution": complete_solution,
             "requires_escalation": requires_escalation,
             "strengths": strengths,
             "weaknesses": weaknesses,
-            "entity_count": sum(entity_counts.values()) if entity_counts else 0,
-            "entity_types": json.dumps(entity_counts) if entity_counts else "{}"
+            "entity_count": row['entity_count'],
+            "entity_types": row["entity_counts_json"]
         }
         temp_annotations.append(annotation)
 
@@ -293,11 +254,9 @@ with col2:
 
 with col3:
     if st.button("💾 Save & Next"):
-        # Save all 4 responses
         st.session_state.annotations.extend(temp_annotations)
         st.success(f"✅ Saved {current_query_id}")
         
-        # Move to next if not at end
         if st.session_state.current_idx < len(queries) - 1:
             st.session_state.current_idx += 1
             st.rerun()
