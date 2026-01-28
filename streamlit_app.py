@@ -2,8 +2,25 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import json
+import spacy
+from spacy import displacy
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Qwen-Coder Annotation", layout="wide")
+
+# Load spaCy model
+@st.cache_resource
+def load_spacy_model():
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except:
+        st.error("Downloading spaCy model... Please wait.")
+        import os
+        os.system("python -m spacy download en_core_web_sm")
+        nlp = spacy.load("en_core_web_sm")
+    return nlp
+
+nlp = load_spacy_model()
 
 # Load data
 @st.cache_data
@@ -13,6 +30,42 @@ def load_data():
 df = load_data()
 queries = df["query_id"].unique()
 
+# Define 18 entity subtypes to highlight
+ENTITY_TYPES = {
+    'PERSON': 'People, including fictional',
+    'NORP': 'Nationalities, religious/political groups',
+    'FAC': 'Buildings, airports, highways, bridges',
+    'ORG': 'Companies, agencies, institutions',
+    'GPE': 'Countries, cities, states',
+    'LOC': 'Non-GPE locations, mountain ranges, water bodies',
+    'PRODUCT': 'Objects, vehicles, foods (not services)',
+    'EVENT': 'Named hurricanes, battles, wars, sports events',
+    'WORK_OF_ART': 'Titles of books, songs, etc.',
+    'LAW': 'Named documents made into laws',
+    'LANGUAGE': 'Any named language',
+    'DATE': 'Absolute or relative dates/periods',
+    'TIME': 'Times smaller than a day',
+    'PERCENT': 'Percentage (including "%")',
+    'MONEY': 'Monetary values, including unit',
+    'QUANTITY': 'Measurements (weight, distance, etc.)',
+    'ORDINAL': '"first", "second", etc.',
+    'CARDINAL': 'Numerals that do not fall under other types'
+}
+
+def render_entities(text):
+    """Process text with spaCy and render entities"""
+    doc = nlp(text)
+    
+    # Count entities by type
+    entity_counts = {}
+    for ent in doc.ents:
+        entity_counts[ent.label_] = entity_counts.get(ent.label_, 0) + 1
+    
+    # Generate HTML with custom colors
+    html = displacy.render(doc, style="ent", jupyter=False)
+    
+    return html, entity_counts, doc
+
 # Initialize session state
 if "current_idx" not in st.session_state:
     st.session_state.current_idx = 0
@@ -20,6 +73,8 @@ if "annotations" not in st.session_state:
     st.session_state.annotations = []
 if "annotator_id" not in st.session_state:
     st.session_state.annotator_id = ""
+if "show_entities" not in st.session_state:
+    st.session_state.show_entities = True
 
 # Sidebar - Annotator ID
 with st.sidebar:
@@ -41,6 +96,10 @@ with st.sidebar:
     completed = len(st.session_state.annotations) // 4  # 4 responses per query
     st.metric("Queries Completed", f"{completed} / {len(queries)}")
     st.progress(st.session_state.current_idx / len(queries))
+    
+    st.markdown("---")
+    st.header("🏷️ Entity View")
+    st.session_state.show_entities = st.checkbox("Show Named Entities", value=True)
     
     st.markdown("---")
     st.header("💾 Export")
@@ -73,6 +132,12 @@ with st.sidebar:
     - 1 = Best
     - 4 = Worst
     """)
+    
+    st.markdown("---")
+    st.header("🏷️ Entity Types")
+    with st.expander("18 Entity Subtypes"):
+        for ent_type, description in ENTITY_TYPES.items():
+            st.markdown(f"**{ent_type}**: {description}")
 
 # Main content
 if not st.session_state.annotator_id:
@@ -100,17 +165,39 @@ colors = ["🔵", "🟢", "🟠", "🟣"]
 st.markdown("#### Responses")
 cols = st.columns(4)
 
+response_data = []
 for i, col in enumerate(cols):
     with col:
         row = query_data[query_data["response_number"] == i + 1].iloc[0]
         st.markdown(f"**{colors[i]} {response_labels[i]}**")
-        st.markdown(f"""
-        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 2px solid #ddd; 
-                    color: black; font-family: monospace; white-space: pre-wrap; max-height: 300px; 
-                    overflow-y: auto; font-size: 11px;">
-        {row["response_text"]}
-        </div>
-        """, unsafe_allow_html=True)
+        
+        if st.session_state.show_entities:
+            # Process with spaCy and show entities
+            html, entity_counts, doc = render_entities(row["response_text"])
+            
+            # Show entity counts
+            if entity_counts:
+                st.markdown("**Entities Found:**")
+                entity_summary = " | ".join([f"{k}: {v}" for k, v in sorted(entity_counts.items())])
+                st.caption(entity_summary)
+            else:
+                st.caption("No entities detected")
+            
+            # Render entity visualization
+            components.html(html, height=350, scrolling=True)
+            
+            response_data.append((row, entity_counts, doc))
+        else:
+            # Show plain text
+            st.markdown(f"""
+            <div style="background-color: white; padding: 10px; border-radius: 5px; border: 2px solid #ddd; 
+                        color: black; font-family: monospace; white-space: pre-wrap; max-height: 300px; 
+                        overflow-y: auto; font-size: 11px;">
+            {row["response_text"]}
+            </div>
+            """, unsafe_allow_html=True)
+            
+            response_data.append((row, {}, None))
 
 st.markdown("---")
 st.markdown("### 📊 Evaluate Each Response")
@@ -122,9 +209,13 @@ cols = st.columns(4)
 
 for i, col in enumerate(cols):
     with col:
-        row = query_data[query_data["response_number"] == i + 1].iloc[0]
+        row, entity_counts, doc = response_data[i]
         
         st.markdown(f"#### {colors[i]} {response_labels[i]}")
+        
+        # Show entity statistics
+        if entity_counts:
+            st.metric("Entities", sum(entity_counts.values()))
         
         st.markdown("**Quality (1-5)**")
         accuracy = st.slider("Accuracy", 1, 5, 3, key=f"acc_{i}_{st.session_state.current_idx}", label_visibility="collapsed")
@@ -161,7 +252,7 @@ for i, col in enumerate(cols):
         st.caption("⚠️ Weaknesses")
         
         # Store annotation for this response
-        temp_annotations.append({
+        annotation = {
             "annotator_id": st.session_state.annotator_id,
             "timestamp": datetime.now().isoformat(),
             "query_id": current_query_id,
@@ -182,8 +273,11 @@ for i, col in enumerate(cols):
             "complete_solution": complete_solution,
             "requires_escalation": requires_escalation,
             "strengths": strengths,
-            "weaknesses": weaknesses
-        })
+            "weaknesses": weaknesses,
+            "entity_count": sum(entity_counts.values()) if entity_counts else 0,
+            "entity_types": json.dumps(entity_counts) if entity_counts else "{}"
+        }
+        temp_annotations.append(annotation)
 
 # Navigation and Save
 st.markdown("---")
